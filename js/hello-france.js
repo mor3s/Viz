@@ -1,6 +1,6 @@
 'use strict';
 
-let margin = { top: 0, left: 30, bottom: 18, right: 0 }
+let margin = { top: 0, left: 0, bottom: 0, right: 0 }
 let inset = { width: 600, height: 600 }
 let france = { margin: margin,
                inset: inset,
@@ -8,25 +8,26 @@ let france = { margin: margin,
                height: inset.height + margin.top + margin.bottom,
                src: 'data/france.tsv',
                dataset: null,
-               x: null,
-               y: null,
-               histoHeight: inset.height / 3,
+               histo: { 
+                   height: inset.height / 3,
+               },
              };
 
 france.map = d3.select('body')
                .append('svg')
                     .attr('width', france.width)
                     .attr('height', france.height)
+                    .style('padding', 30)
 
 france.map.canvas = france.map.append('g')
                               .attr('transform', `translate(${france.margin.left}, ${france.margin.top})`)
 
-france.histo = d3.select('body')
+france.histo.canvas = d3.select('body')
                      .append('svg').attr('id', 'pop-histo')
                      .attr('width', france.width)
-                     .attr('height', france.histoHeight)
-france.histo.canvas = france.histo.append('g')
-                        .attr('transform', `translate(${france.margin.left}, ${france.margin.top})`)
+                     .attr('height', france.histo.height)
+                     .style('padding-bottom', '30')
+                     .style('padding-left', 5)
 
 let tooltip = d3.select('body')
                 .append('div')
@@ -69,9 +70,23 @@ d3.tsv(france.src)
         france.y = d3.scaleLinear()
                      .domain(d3.extent(rows, row => row.latitude))
                      .range([france.inset.height, 0]);
+        france.popScale = d3.scalePow()
+            .domain(d3.extent(rows, row => row.population))
+            .range([france.inset.width, 0])
         
         // xAxis = d3.svg.axis().scale(x).orient("bottom");
         // yAxis = d3.svg.axis().scale(y).orient("left");
+        france.histo.x = d3.scaleLinear()
+            .domain(d3.extent(rows, row => row.population))
+            .rangeRound([0, france.inset.width])
+        france.histo.bins = d3.histogram()
+            .value(d => d.population)
+            .domain(france.histo.x.domain())
+            .thresholds(france.histo.x.ticks(20))(rows)
+        france.histo.y = d3.scaleLinear()
+            .domain([0, d3.max(france.histo.bins, d => 
+                d.length)])
+            .range([france.histo.height, 0])
 
         france.dataset = rows;
         draw(france.dataset);
@@ -103,6 +118,20 @@ function draw(dataset) {
                 .attr("y", d => france.y(d.latitude) )
                 .attr("fill", "blue")
                 .on('mouseover', showPlaceInTooltip)
+    
+    france.histo.canvas.selectAll('rect')
+        .data(france.histo.bins)
+        .enter()
+            .append('rect')
+            .attr('x', d => france.histo.x(d.x0)) // magique, définie par d3.histogram
+            .attr('y', d => france.histo.y(d.length))
+            .attr('width', france.histo.x(france.histo.bins[0].x1) - france.histo.x(france.histo.bins[0].x0) - 1)
+            .attr('height', d => france.histo.height - france.histo.y(d.length))
+            .attr('fill', 'steelblue')
+    france.histo.canvas.append('g')
+        .attr('class', "population histogram x axis")
+        .attr('transform', `translate(0, ${france.histo.height})`)
+        .call(d3.axisBottom(france.histo.x))
 }
 
 function showPlaceInTooltip(d) {
