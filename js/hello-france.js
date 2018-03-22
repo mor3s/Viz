@@ -1,5 +1,6 @@
 'use strict';
 
+let highlighted = []
 let margin = { top: 0, left: 0, bottom: 0, right: 0 }
 let inset = { width: 600, height: 600 }
 let france = { margin: margin,
@@ -51,6 +52,7 @@ d3.tsv(france.src)
             latitude: +d.y,
             population: +d.population,
             density: +d.density,
+            highlighted: false,
         }
     })
     .get( (error, rows) => {
@@ -77,12 +79,16 @@ d3.tsv(france.src)
         // xAxis = d3.svg.axis().scale(x).orient("bottom");
         // yAxis = d3.svg.axis().scale(y).orient("left");
         france.histo.x = d3.scaleLinear()
-            .domain(d3.extent(rows, row => row.population))
+            .domain(d3.extent(rows, row => Math.sqrt(row.population)))
             .rangeRound([0, france.inset.width])
+        france.histo.xAxis = d3.axisBottom(
+            d3.scaleSqrt()
+                .domain(d3.extent(rows, row=> row.population))
+                .rangeRound([0, france.inset.width]))
         france.histo.bins = d3.histogram()
-            .value(d => d.population)
+            .value(d => Math.sqrt(d.population))
             .domain(france.histo.x.domain())
-            .thresholds(france.histo.x.ticks(20))(rows)
+            .thresholds(600)(rows.filter(row => row.population > 0))
         france.histo.y = d3.scaleLinear()
             .domain([0, d3.max(france.histo.bins, d => 
                 d.length)])
@@ -90,9 +96,38 @@ d3.tsv(france.src)
 
         france.dataset = rows;
         draw(france.dataset);
+        drawAxes();
     });
 
 function draw(dataset) {
+    let places = france.map.canvas.selectAll("rect").data(dataset)
+    places.attr('fill', d => d.highlighted ? 'red' : 'steelblue')
+        .attr('width', d => d.highlighted ? 4 : 1)
+        .attr('height', d => d.highlighted ? 4 : 1)
+    places.exit().remove()
+    places.enter()
+            .append("rect")
+                .attr("width", 1)
+                .attr("height", 1)
+                .attr("x", d => france.x(d.longitude) )
+                .attr("y", d => france.y(d.latitude) )
+                .attr("fill", "steelblue")
+                .on('mouseover', showPlaceInTooltip)
+    
+    france.histo.canvas.selectAll('rect')
+        .data(france.histo.bins)
+        .enter()
+            .append('rect')
+            .attr('x', d => france.histo.x(d.x0)) // magique, définie par d3.histogram
+            .attr('y', d => france.histo.y(d.length))
+            .attr('width', d => france.histo.x(d.x1) - france.histo.x(d.x0))
+            .attr('height', d => france.histo.height - france.histo.y(d.length))
+            .attr('fill', 'steelblue')
+            .on('mouseover', selectPlaces)
+            .on('mouseout', deselectPlaces)
+}
+
+function drawAxes() {
     france.map.append("g")
             .attr("class", "x axis")
             .attr("transform", `translate(${france.margin.left}, ${france.inset.height})`) // ^1
@@ -108,30 +143,15 @@ function draw(dataset) {
         /* ^1: axes are always positioned at the origin.  The Right/Left/Top/Bottom indicated where the text is relative to the axis
         */
     
-    france.map.canvas.selectAll("rect")
-        .data(dataset)
-        .enter()
-            .append("rect")
-                .attr("width", 1)
-                .attr("height", 1)
-                .attr("x", d => france.x(d.longitude) )
-                .attr("y", d => france.y(d.latitude) )
-                .attr("fill", "blue")
-                .on('mouseover', showPlaceInTooltip)
-    
-    france.histo.canvas.selectAll('rect')
-        .data(france.histo.bins)
-        .enter()
-            .append('rect')
-            .attr('x', d => france.histo.x(d.x0)) // magique, définie par d3.histogram
-            .attr('y', d => france.histo.y(d.length))
-            .attr('width', france.histo.x(france.histo.bins[0].x1) - france.histo.x(france.histo.bins[0].x0) - 1)
-            .attr('height', d => france.histo.height - france.histo.y(d.length))
-            .attr('fill', 'steelblue')
     france.histo.canvas.append('g')
-        .attr('class', "population histogram x axis")
-        .attr('transform', `translate(0, ${france.histo.height})`)
-        .call(d3.axisBottom(france.histo.x))
+       .attr('class', "population histogram x axis")
+       .attr('transform', `translate(0, ${france.histo.height})`)
+       .call(france.histo.xAxis)
+    france.histo.canvas.selectAll('.x.axis g.tick:nth-child(even) text').attr('y', 20)
+    france.histo.canvas.selectAll('.x.axis g.tick:nth-child(even) line').attr('y2', 17)
+
+
+    
 }
 
 function showPlaceInTooltip(d) {
@@ -152,6 +172,15 @@ function hideTooltip(d) {
     tooltip.style('visibility', 'hidden');
 }
 
+function selectPlaces(d, i) {
+    d.forEach( place => { place.highlighted = true; highlighted.push(place) } )
+    draw(france.dataset)
+}
+
+function deselectPlaces(d) {
+    d.forEach( place => place.highlighted = false )
+    // draw(france.dataset)
+}
 // TODO : 
 // Add tooltip
 // Add histogram of populations
