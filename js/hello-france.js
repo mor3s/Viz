@@ -19,6 +19,7 @@ let france = { margin: margin,
 
 france.map = d3.select('body')
                .append('svg')
+                    .attr('class', 'map')
                     .attr('width', france.width)
                     .attr('height', france.height)
 
@@ -127,8 +128,14 @@ d3.tsv(france.src)
     });
 
 function draw(dataset) {
+    drawMap(dataset)
+    drawHistogram()
+    drawPopCurve()
+}
+
+function drawMap(dataset) {
     let places = france.map.canvas.selectAll("rect").data(dataset)
-    places.attr('fill', d => d.highlighted ? 'red' : 'steelblue')
+    places.attr('fill', d => d.highlighted ? 'orange' : 'steelblue')
         .attr('width', d => d.highlighted ? 4 : 1)
         .attr('height', d => d.highlighted ? 4 : 1)
     places.exit().remove()
@@ -140,9 +147,12 @@ function draw(dataset) {
                 .attr("y", d => france.y(d.latitude) )
                 .attr("fill", "steelblue")
                 .on('mouseover', showPlaceInTooltip)
-    
+}
+
+function drawHistogram() {
     france.histo.canvas.selectAll('rect')
         .data(france.histo.bins)
+        .attr('fill', d => d.map( place => place.highlighted ).reduce( (result, i) => result || i, false ) ? 'orange' : 'steelblue')
         .enter()
             .append('rect')
             .attr('x', d => france.histo.x(d.x0)) // magique, définie par d3.histogram
@@ -152,12 +162,13 @@ function draw(dataset) {
             .attr('fill', 'steelblue')
             .on('mouseover', selectPlaces)
             .on('mouseout', deselectPlaces)
-    
+}
+
+function drawPopCurve() {
     france.popCurve.canvas.append('path')
         .attr('d', france.popCurve.line(france.popCurve.data))
         .attr('fill', 'none')
         .attr('stroke', 'blue')
-
 }
 
 function drawAxes() {
@@ -193,12 +204,12 @@ function drawAxes() {
     france.popCurve.canvas.append('g')
         .attr('class', 'population curve y axis')
         .call(france.popCurve.yAxis)
-
-
-    
 }
 
 function showPlaceInTooltip(d) {
+    d3.selectAll('.map .highlighted').classed('unhighlighted', true)
+    highlighted = [d]
+    d.highlighted = true
     tooltip.text('') // reset tooltip contents
            .append('b').text(d.place)
     tooltip.append('span').text(` (${d.codePostal})`).append('br')
@@ -210,21 +221,55 @@ function showPlaceInTooltip(d) {
     tooltip.style('visibility', 'visible')
            .style('top', d3.event.y + 'px')
            .style('left', (d3.event.x + 25) + 'px')
+    this.classList.add('highlighted')
+    updateHighlights()
 }
 
 function hideTooltip(d) {
     tooltip.style('visibility', 'hidden');
+    this.classList.remove('highlighted')
+    this.classList.add('unhighlight')
+    highlighted = []
 }
 
 function selectPlaces(d, i) {
-    d.forEach( place => { place.highlighted = true } )
-    draw(france.dataset)
+    highlighted.forEach( place => place.highlighted = false ) // remove old selection
+    highlighted = d // add new selection
+    d.forEach( place => {  // and update data
+        place.highlighted = true 
+    })
+
+    updateHighlights() // refresh drawing
+    // draw(france.dataset)
 }
 
 function deselectPlaces(d) {
     d.forEach( place => place.highlighted = false )
     // draw(france.dataset)
 }
+
+function updateHighlights() {
+    // Make sure all highlighted place have highlighted class in map
+    d3.selectAll('.map rect:not(.highlighted)')
+        .filter( d => d.highlighted )
+        .classed('highlighted', true)
+    d3.selectAll('.map .highlighted')
+        .filter( d => !d.highlighted )
+        .classed('highlighted', false)
+        .classed('unhighlighted', true)
+    d3.selectAll('.map .highlighted')
+        .attr('width', 8)
+        .attr('height', 8)
+    d3.selectAll('.map .unhighlighted')
+        .attr('width', 1)
+        .attr('height', 1)
+        .each( d => d.highlighted = false )
+        .classed('unhighlighted', false)
+    
+        
+    drawHistogram()
+}
+
 // TODO : 
 // Add tooltip
 // Add histogram of populations
