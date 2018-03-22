@@ -10,15 +10,17 @@ let france = { margin: margin,
                src: 'data/france.tsv',
                dataset: null,
                histo: { 
-                   height: inset.height / 3,
+                   height: inset.height / 4,
                },
+               popCurve: {
+                   height: inset.height / 4,
+               }
              };
 
 france.map = d3.select('body')
                .append('svg')
                     .attr('width', france.width)
                     .attr('height', france.height)
-                    .style('padding', 30)
 
 france.map.canvas = france.map.append('g')
                               .attr('transform', `translate(${france.margin.left}, ${france.margin.top})`)
@@ -27,8 +29,18 @@ france.histo.canvas = d3.select('body')
                      .append('svg').attr('id', 'pop-histo')
                      .attr('width', france.width)
                      .attr('height', france.histo.height)
-                     .style('padding-bottom', '30')
-                     .style('padding-left', 5)
+                    //  .style('padding', 45)
+
+france.popCurve.canvas = d3.select('body')
+    .append('svg').attr('id', 'pop-curve')
+    .attr('width', france.width)
+    .attr('height', france.popCurve.height)
+    // .style('padding', 55)
+
+d3.selectAll('svg')
+    .style('padding-left', 55)
+    .style('padding-bottom', 30)
+    .style('padding-top', 10)
 
 let tooltip = d3.select('body')
                 .append('div')
@@ -88,11 +100,26 @@ d3.tsv(france.src)
         france.histo.bins = d3.histogram()
             .value(d => Math.sqrt(d.population))
             .domain(france.histo.x.domain())
-            .thresholds(600)(rows.filter(row => row.population > 0))
-        france.histo.y = d3.scaleLinear()
+            .thresholds(100)(rows.filter(row => row.population > 0))
+        france.histo.y = d3.scalePow().exponent(0.3)
             .domain([0, d3.max(france.histo.bins, d => 
                 d.length)])
             .range([france.histo.height, 0])
+        france.histo.yAxis = d3.axisLeft(france.histo.y)
+
+        france.popCurve.data = rows.filter( d => d.population > 0 )
+            .sort( (a, b) => a.population - b.population)
+        france.popCurve.x = d3.scaleLinear()
+            .domain([0, france.popCurve.data.length])
+            .range([0, france.width])
+        france.popCurve.y = d3.scalePow().exponent(0.25)
+            .domain(d3.extent(france.popCurve.data, d => d.population))
+            .range([france.popCurve.height, 0])
+        france.popCurve.line = d3.line()
+            .x( (d, i) => france.popCurve.x(i) )
+            .y( d => france.popCurve.y(d.population) )
+        france.popCurve.xAxis = d3.axisBottom(france.popCurve.x).ticks(0)
+        france.popCurve.yAxis = d3.axisLeft(france.popCurve.y).ticks(6)
 
         france.dataset = rows;
         draw(france.dataset);
@@ -120,11 +147,17 @@ function draw(dataset) {
             .append('rect')
             .attr('x', d => france.histo.x(d.x0)) // magique, définie par d3.histogram
             .attr('y', d => france.histo.y(d.length))
-            .attr('width', d => france.histo.x(d.x1) - france.histo.x(d.x0))
+            .attr('width', d => Math.max(france.histo.x(d.x1) - france.histo.x(d.x0), 1))
             .attr('height', d => france.histo.height - france.histo.y(d.length))
             .attr('fill', 'steelblue')
             .on('mouseover', selectPlaces)
             .on('mouseout', deselectPlaces)
+    
+    france.popCurve.canvas.append('path')
+        .attr('d', france.popCurve.line(france.popCurve.data))
+        .attr('fill', 'none')
+        .attr('stroke', 'blue')
+
 }
 
 function drawAxes() {
@@ -147,8 +180,19 @@ function drawAxes() {
        .attr('class', "population histogram x axis")
        .attr('transform', `translate(0, ${france.histo.height})`)
        .call(france.histo.xAxis)
+    france.histo.canvas.append('g')
+        .attr('class', 'population histogram y axis')
+        .call(france.histo.yAxis)
     france.histo.canvas.selectAll('.x.axis g.tick:nth-child(even) text').attr('y', 20)
     france.histo.canvas.selectAll('.x.axis g.tick:nth-child(even) line').attr('y2', 17)
+
+    france.popCurve.canvas.append('g')
+        .attr('class', 'population curve x axis')
+        .attr('transform', `translate(0, ${france.popCurve.height})`)
+        .call(france.popCurve.xAxis)
+    france.popCurve.canvas.append('g')
+        .attr('class', 'population curve y axis')
+        .call(france.popCurve.yAxis)
 
 
     
@@ -173,7 +217,7 @@ function hideTooltip(d) {
 }
 
 function selectPlaces(d, i) {
-    d.forEach( place => { place.highlighted = true; highlighted.push(place) } )
+    d.forEach( place => { place.highlighted = true } )
     draw(france.dataset)
 }
 
