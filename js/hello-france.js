@@ -134,17 +134,19 @@ function draw(dataset) {
 }
 
 function drawMap(dataset) {
-    let places = france.map.canvas.selectAll("rect").data(dataset)
+    let places = france.map.canvas.selectAll("circle").data(dataset)
     places.attr('fill', d => d.highlighted ? 'orange' : 'steelblue')
         .attr('width', d => d.highlighted ? 4 : 1)
         .attr('height', d => d.highlighted ? 4 : 1)
+        .attr('r', d => d.highlighted ? 4 : 1)
     places.exit().remove()
     places.enter()
-            .append("rect")
+            .append("circle")
                 .attr("width", 1)
                 .attr("height", 1)
-                .attr("x", d => france.x(d.longitude) )
-                .attr("y", d => france.y(d.latitude) )
+                .attr('r', 1)
+                .attr("cx", d => france.x(d.longitude) )
+                .attr("cy", d => france.y(d.latitude) )
                 .attr("fill", "steelblue")
                 .on('mouseover', showPlaceInTooltip)
 }
@@ -250,7 +252,7 @@ function deselectPlaces(d) {
 
 function updateHighlights() {
     // Make sure all highlighted place have highlighted class in map
-    d3.selectAll('.map rect:not(.highlighted)')
+    d3.selectAll('.map circle:not(.highlighted)')
         .filter( d => d.highlighted )
         .classed('highlighted', true)
     d3.selectAll('.map .highlighted')
@@ -260,10 +262,12 @@ function updateHighlights() {
     d3.selectAll('.map .highlighted')
         .attr('width', 8)
         .attr('height', 8)
+        .attr('r', 4)
         .raise() // move to front
     d3.selectAll('.map .unhighlighted')
         .attr('width', 1)
         .attr('height', 1)
+        .attr('r', 1)
         .each( d => d.highlighted = false )
         .classed('unhighlighted', false)
     
