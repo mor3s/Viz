@@ -260,6 +260,7 @@ function updateHighlights() {
     d3.selectAll('.map .highlighted')
         .attr('width', 8)
         .attr('height', 8)
+        .raise() // move to front
     d3.selectAll('.map .unhighlighted')
         .attr('width', 1)
         .attr('height', 1)
