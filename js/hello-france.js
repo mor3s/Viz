@@ -87,7 +87,10 @@ d3.tsv(france.src)
                      .range([france.inset.height, 0]);
         france.popScale = d3.scalePow()
             .domain(d3.extent(rows, row => row.population))
-            .range([france.inset.width, 0])
+            .range([1, 20])
+        france.densityScale = d3.scalePow()
+            .domain(d3.extent(rows, row => row.density))
+            .range([.5, .8])
         
         // xAxis = d3.svg.axis().scale(x).orient("bottom");
         // yAxis = d3.svg.axis().scale(y).orient("left");
@@ -135,19 +138,21 @@ function draw(dataset) {
 
 function drawMap(dataset) {
     let places = france.map.canvas.selectAll("circle").data(dataset)
-    places.attr('fill', d => d.highlighted ? 'orange' : 'steelblue')
-        .attr('width', d => d.highlighted ? 4 : 1)
-        .attr('height', d => d.highlighted ? 4 : 1)
-        .attr('r', d => d.highlighted ? 4 : 1)
     places.exit().remove()
     places.enter()
             .append("circle")
                 .attr("width", 1)
                 .attr("height", 1)
-                .attr('r', 1)
+                .attr('r', d => france.popScale(d.population))
                 .attr("cx", d => france.x(d.longitude) )
                 .attr("cy", d => france.y(d.latitude) )
-                .attr("fill", "steelblue")
+                // .attr('opacity', d => france.densityScale(d.density))
+                // .attr("fill", "steelblue")
+                .attr('fill', d => {
+                    let color = d3.hsl("steelblue")
+                    color.opacity = france.densityScale(d.density)
+                    return color
+                })
                 .on('mouseover', showPlaceInTooltip)
 }
 
@@ -262,7 +267,7 @@ function updateHighlights() {
     d3.selectAll('.map .highlighted')
         .attr('width', 8)
         .attr('height', 8)
-        .attr('r', 4)
+        .attr('r', d => france.popScale(d.population))
         .raise() // move to front
     d3.selectAll('.map .unhighlighted')
         .attr('width', 1)
