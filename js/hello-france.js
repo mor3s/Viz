@@ -1,62 +1,21 @@
-'use strict';
+var margin = { top: 10, right: 30, bottom: 30, left: 60 },
+    width = 600 - margin.left - margin.right,
+    height = 600 - margin.top - margin.bottom;
 
-let highlighted = []
-let margin = { top: 0, left: 0, bottom: 0, right: 0 }
-let inset = { width: 600, height: 600 }
-let france = { margin: margin,
-               inset: inset,
-               width: inset.width + margin.left + margin.right,
-               height: inset.height + margin.top + margin.bottom,
-               src: 'data/france.tsv',
-               dataset: null,
-               histo: { 
-                   height: inset.height / 4,
-               },
-               popCurve: {
-                   height: inset.height / 4,
-               }
-             };
+let dataset = [];
 
-france.map = d3.select('body')
-               .append('svg')
-                    .attr('class', 'map')
-                    .attr('width', france.width)
-                    .attr('height', france.height)
 
-france.map.canvas = france.map.append('g')
-                              .attr('transform', `translate(${france.margin.left}, ${france.margin.top})`)
 
-france.histo.canvas = d3.select('body')
-                     .append('svg').attr('id', 'pop-histo')
-                     .attr('width', france.width)
-                     .attr('height', france.histo.height)
-                    //  .style('padding', 45)
+let svg = d3.select("#my_dataviz").append("svg")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+    .append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")")
 
-france.popCurve.canvas = d3.select('body')
-    .append('svg').attr('id', 'pop-curve')
-    .attr('width', france.width)
-    .attr('height', france.popCurve.height)
-    // .style('padding', 55)
 
-d3.selectAll('svg')
-    .style('padding-left', 55)
-    .style('padding-bottom', 30)
-    .style('padding-top', 10)
 
-let tooltip = d3.select('body')
-                .append('div')
-                .attr('id', 'tooltip')
-                .style('visibility', 'hidden')
-                .style('position', 'absolute')
-                .style("background-color", d3.hsl(40, 0.4, 0.9).toString())
-                .style("border", "solid 1px black")
-                .style("opacity", 0.8)
-                .style("padding", "5px")
-                .style("border-radius", "4px")
 
-d3.tsv(france.src)
-    .row( (d, i) => {
-        if (isNaN(+d.x) || isNaN(+d.y)) return null;
+d3.tsv("data/france.tsv", (d, i) => {
         return {
             codePostal: +d["Postal Code"],
             inseeCode: +d.inseecode,
@@ -64,225 +23,158 @@ d3.tsv(france.src)
             longitude: +d.x,
             latitude: +d.y,
             population: +d.population,
-            density: +d.density,
-            highlighted: false,
-        }
-    })
-    .get( (error, rows) => {
-        if (error) {
-            console.log(`Error! ${error}.`);
-            return;
-        }
-        console.log(`Loaded ${rows.length} rows.`);
+            density: +d.density
+        };
+    }).then((rows) => {
+        console.log(`Loaded ${rows.length} rows,`);
         if (rows.length > 0) {
             console.log("First row: ", rows[0]);
-            console.log("Last row: ", rows[rows.length-1]);
+            console.log("Last row: ", rows[rows.length - 1]);
+            dataset = rows;
+            population = d3.scalePow()
+                .domain(d3.extent(rows, (row) => row.population))
+                .range([1, 2])
+            x = d3.scaleLinear()
+                .domain(d3.extent(rows, (row) => row.longitude))
+                .range([0, width]);
+
+            y = d3.scaleLinear()
+                .domain(d3.extent(rows, (row) => row.latitude))
+                .range([height, 0]);
+
+            draw()
         }
-
-        france.x = d3.scaleLinear()
-                     .domain(d3.extent(rows, row => row.longitude ))
-                     .range([0, france.inset.width]);
-        france.y = d3.scaleLinear()
-                     .domain(d3.extent(rows, row => row.latitude))
-                     .range([france.inset.height, 0]);
-        france.popScale = d3.scalePow()
-            .domain(d3.extent(rows, row => row.population))
-            .range([1, 20])
-        france.densityScale = d3.scalePow()
-            .domain(d3.extent(rows, row => row.density))
-            .range([.5, .8])
-        
-        // xAxis = d3.svg.axis().scale(x).orient("bottom");
-        // yAxis = d3.svg.axis().scale(y).orient("left");
-        france.histo.x = d3.scaleLinear()
-            .domain(d3.extent(rows, row => Math.sqrt(row.population)))
-            .rangeRound([0, france.inset.width])
-        france.histo.xAxis = d3.axisBottom(
-            d3.scaleSqrt()
-                .domain(d3.extent(rows, row=> row.population))
-                .rangeRound([0, france.inset.width]))
-        france.histo.bins = d3.histogram()
-            .value(d => Math.sqrt(d.population))
-            .domain(france.histo.x.domain())
-            .thresholds(100)(rows.filter(row => row.population > 0))
-        france.histo.y = d3.scalePow().exponent(0.3)
-            .domain([0, d3.max(france.histo.bins, d => 
-                d.length)])
-            .range([france.histo.height, 0])
-        france.histo.yAxis = d3.axisLeft(france.histo.y)
-
-        france.popCurve.data = rows.filter( d => d.population > 0 )
-            .sort( (a, b) => a.population - b.population)
-        france.popCurve.x = d3.scaleLinear()
-            .domain([0, france.popCurve.data.length])
-            .range([0, france.width])
-        france.popCurve.y = d3.scalePow().exponent(0.25)
-            .domain(d3.extent(france.popCurve.data, d => d.population))
-            .range([france.popCurve.height, 0])
-        france.popCurve.line = d3.line()
-            .x( (d, i) => france.popCurve.x(i) )
-            .y( d => france.popCurve.y(d.population) )
-        france.popCurve.xAxis = d3.axisBottom(france.popCurve.x).ticks(0)
-        france.popCurve.yAxis = d3.axisLeft(france.popCurve.y).ticks(6)
-
-        france.dataset = rows;
-        draw(france.dataset);
-        drawAxes();
+    })
+    .catch((error) => {
+        console.log("Something went wrong", error)
     });
 
-function draw(dataset) {
-    drawMap(dataset)
-    drawHistogram()
-    drawPopCurve()
-}
 
-function drawMap(dataset) {
-    let places = france.map.canvas.selectAll("circle").data(dataset)
-    places.exit().remove()
-    places.enter()
-            .append("circle")
-                .attr("width", 1)
-                .attr("height", 1)
-                .attr('r', d => france.popScale(d.population))
-                .attr("cx", d => france.x(d.longitude) )
-                .attr("cy", d => france.y(d.latitude) )
-                // .attr('opacity', d => france.densityScale(d.density))
-                // .attr("fill", "steelblue")
-                .attr('fill', d => {
-                    let color = d3.hsl("steelblue")
-                    color.opacity = france.densityScale(d.density)
-                    return color
-                })
-                .on('mouseover', showPlaceInTooltip)
-}
 
-function drawHistogram() {
-    france.histo.canvas.selectAll('rect')
-        .data(france.histo.bins)
-        .attr('fill', d => d.map( place => place.highlighted ).reduce( (result, i) => result || i, false ) ? 'orange' : 'steelblue')
+
+function draw() {
+
+    var tooltip = d3.select('#my_dataviz')
+        .append("div")
+        .style("opacity", 0)
+        .attr("class", "tooltip")
+        .style("background-color", "white")
+        .style("border", "solid")
+        .style("border-width", "1px")
+        .style("border-radius", "5px")
+        .style("padding", "10px")
+
+    const mouseover = function(event, d) {
+        d3.select(this).transition()
+            .duration('100')
+            .attr("r", 10)
+            .style("fill", "#2DE0B7")
+
+        tooltip
+            .style("opacity", 1)
+    }
+
+    const mousemove = function(event, d) {
+        tooltip
+            .html(`latitude: ${d.latitude}<br>
+                   longitude: ${d.longitude}<br>
+                   place: ${d.place}<br>
+                   inseeCode: ${d.inseeCode}<br>
+                   population: ${d.population}<br>
+                   density: ${d.density}<br>
+                   Postal Code: ${d.codePostal}<br>`)
+            .style("top", (event.pageY) + "px")
+            .style("left", (event.pageX) + "px")
+            .style("position", "absolute")
+    }
+    const mouseleave = function(event, d) {
+        d3.select(this).transition()
+            .duration('200')
+            .attr("r", population(d.population))
+            .style("fill", "#69b3a2")
+        tooltip
+            .transition()
+            .duration(200)
+            .style("opacity", 0)
+    }
+
+    var clip = svg.append("defs").append("svg:clipPath")
+        .attr("id", "clip")
+        .append("svg:rect")
+        .attr("id", "map")
+        .attr("width", width)
+        .attr("height", height)
+        .attr("x", 0)
+        .attr("y", 0);
+
+    var scatter = svg.append('g')
+        .attr("clip-path", "url(#clip)")
+
+
+
+    scatter
+        .append('g')
+        .selectAll("circle")
+        .data(dataset)
         .enter()
-            .append('rect')
-            .attr('x', d => france.histo.x(d.x0)) // magique, définie par d3.histogram
-            .attr('y', d => france.histo.y(d.length))
-            .attr('width', d => Math.max(france.histo.x(d.x1) - france.histo.x(d.x0), 1))
-            .attr('height', d => france.histo.height - france.histo.y(d.length))
-            .attr('fill', 'steelblue')
-            .on('mouseover', selectPlaces)
-            .on('mouseout', deselectPlaces)
-}
+        .append("circle")
+        .attr("class", "circles")
+        .attr("r", (d) => population(d.population))
+        .attr("cx", (d) => x(d.longitude))
+        .attr("cy", (d) => y(d.latitude))
+        .attr("fill", "#69b3a2")
+        .style("opacity", 0.8)
+        .on("mouseover", mouseover)
+        .on("mousemove", mousemove)
+        .on("mouseleave", mouseleave)
 
-function drawPopCurve() {
-    france.popCurve.canvas.append('path')
-        .attr('d', france.popCurve.line(france.popCurve.data))
-        .attr('fill', 'none')
-        .attr('stroke', 'blue')
-}
 
-function drawAxes() {
-    france.map.append("g")
-            .attr("class", "x axis")
-            .attr("transform", `translate(${france.margin.left}, ${france.inset.height})`) // ^1
-            .call(d3.axisBottom(france.x))
-        .append("text")
-            .text("Latitude")
+    var xAxis = svg.append("g")
+        .attr("class", "x axis")
+        .attr("transform", "translate(0," + height + ")")
+        .call(d3.axisBottom(x))
 
-    france.map.append("g")
+
+    var yAxis = svg.append("g")
         .attr("class", "y axis")
-        .attr("transform", `translate(${france.margin.left}, 0)`)
-        .call(d3.axisLeft(france.y))
+        .call(d3.axisLeft(y))
 
-        /* ^1: axes are always positioned at the origin.  The Right/Left/Top/Bottom indicated where the text is relative to the axis
-        */
-    
-    france.histo.canvas.append('g')
-       .attr('class', "population histogram x axis")
-       .attr('transform', `translate(0, ${france.histo.height})`)
-       .call(france.histo.xAxis)
-    france.histo.canvas.append('g')
-        .attr('class', 'population histogram y axis')
-        .call(france.histo.yAxis)
-    france.histo.canvas.selectAll('.x.axis g.tick:nth-child(even) text').attr('y', 20)
-    france.histo.canvas.selectAll('.x.axis g.tick:nth-child(even) line').attr('y2', 17)
+    var zoom = d3.zoom()
+        .scaleExtent([.5, 20])
+        .extent([
+            [0, 0],
+            [width, height]
+        ])
+        .on("zoom", updateChart);
 
-    france.popCurve.canvas.append('g')
-        .attr('class', 'population curve x axis')
-        .attr('transform', `translate(0, ${france.popCurve.height})`)
-        .call(france.popCurve.xAxis)
-    france.popCurve.canvas.append('g')
-        .attr('class', 'population curve y axis')
-        .call(france.popCurve.yAxis)
+    svg.append("rect")
+        .attr("width", width)
+        .attr("height", height)
+        .style("fill", "none")
+        .style("pointer-events", "all")
+        .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')')
+        .lower()
+        .call(zoom);
+
+
+
+    function updateChart(event) {
+
+
+        var newX = event.transform.rescaleX(x);
+        var newY = event.transform.rescaleY(y);
+
+
+        xAxis.call(d3.axisBottom(newX))
+        yAxis.call(d3.axisLeft(newY))
+
+
+        scatter
+            .selectAll("circle")
+            .attr('cx', function(d) { return newX(d.longitude) })
+            .attr('cy', function(d) { return newY(d.latitude) })
+
+    }
+
+
 }
-
-function showPlaceInTooltip(d) {
-    d3.selectAll('.map .highlighted').classed('unhighlighted', true)
-    highlighted = [d]
-    d.highlighted = true
-    tooltip.text('') // reset tooltip contents
-           .append('b').text(d.place)
-    tooltip.append('span').text(` (${d.codePostal})`).append('br')
-    tooltip.append('b').text('Population: ')
-    tooltip.append('span').text(d.population).append('br')
-    tooltip.append('b').text('Density: ')
-    tooltip.append('span').text(d.density).append('br')
-
-    tooltip.style('visibility', 'visible')
-           .style('top', d3.event.y + 'px')
-           .style('left', (d3.event.x + 25) + 'px')
-    this.classList.add('highlighted')
-    updateHighlights()
-}
-
-function hideTooltip(d) {
-    tooltip.style('visibility', 'hidden');
-    this.classList.remove('highlighted')
-    this.classList.add('unhighlight')
-    highlighted = []
-}
-
-function selectPlaces(d, i) {
-    highlighted.forEach( place => place.highlighted = false ) // remove old selection
-    highlighted = d // add new selection
-    d.forEach( place => {  // and update data
-        place.highlighted = true 
-    })
-
-    updateHighlights() // refresh drawing
-    // draw(france.dataset)
-}
-
-function deselectPlaces(d) {
-    d.forEach( place => place.highlighted = false )
-    // draw(france.dataset)
-}
-
-function updateHighlights() {
-    // Make sure all highlighted place have highlighted class in map
-    d3.selectAll('.map circle:not(.highlighted)')
-        .filter( d => d.highlighted )
-        .classed('highlighted', true)
-    d3.selectAll('.map .highlighted')
-        .filter( d => !d.highlighted )
-        .classed('highlighted', false)
-        .classed('unhighlighted', true)
-    d3.selectAll('.map .highlighted')
-        .attr('width', 8)
-        .attr('height', 8)
-        .attr('r', d => france.popScale(d.population))
-        .raise() // move to front
-    d3.selectAll('.map .unhighlighted')
-        .attr('width', 1)
-        .attr('height', 1)
-        .attr('r', 1)
-        .each( d => d.highlighted = false )
-        .classed('unhighlighted', false)
-    
-        
-    drawHistogram()
-}
-
-// TODO : 
-// Add tooltip
-// Add histogram of populations
-// Use classes ?
-// Add population curve
-// Linked views + filtering
